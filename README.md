@@ -1,6 +1,6 @@
 # Transcription factor binding site (TFBS) identification in modified rDNA
-Bioinformatic R pipeline built for the data integration of JASPAR2020
 
-Bioinformatics analysis conducted to investigate "Ribosomal DNA haplotype-specific silencing due to underlying differential transcription factor binding in _Mus musculus_" as a part of the Holland Laboratory, Kings College London using the JASPAR2020 database. Transcription factor binding sites (TFBS) of 107 transcription factors (TFs) within the CORE collection were mapped at min.score = 75%. Previously identified single nucleotide variants (SNVs) and haplotypes in mice strain C57BL/6J were then mapped. 
+R pipeline built for bioinformatics analysis of "Ribosomal DNA haplotype-specific silencing due to underlying differential transcription factor binding in _Mus musculus_" as part of the Holland Laboratory, Kings College London. 
 
-An initial pipeline was built and tested on RUNX1 (ID MA0002.2) and compared to findings by [Charles _et al.,_ 2022](https://doi.org/10.1016/j.molcel.2022.08.027). The modified rDNA sequence used for alignment was created by Dr. L. Mikheeva at Holland Laboratory. SNVs used in the analysis were identified by [Rodriguez-Algarra _et al._, 2022](https://link.springer.com/article/10.1186/s13059-022-02617-x).
+Databases used - JASPAR2020 and single-cell data from ENCODE 
+Ribosomal DNA (rDNA) sequence and haplotype-specific single nucleotide variants (SNVs) source -  [Rodriguez-Algarra _et al._, 2022](https://link.springer.com/article/10.1186/s13059-022-02617-x)
