@@ -2,8 +2,9 @@
 
 This is a R pipeline (R version 4.5.3) built and ran primarily on Kings College London's HPC for the project "Ribosomal DNA haplotype-specific silencing due to underlying differential transcription factor binding in _Mus musculus_" as a part of the module "7BBG1006 Extended Research Project in Applied Bioinformatics 25-26". This work was done under my supervisor Dr. Michelle Holland at the Department of Medical and Molecular Genetics. 
 
-Author: Yanjing Zhang 
-Date: 16 July 2026 
+Author: Yanjing Zhang           
+
+sDate: 16 July 2026 
 
 ## Table of content 
 
