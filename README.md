@@ -1,13 +1,12 @@
-# Transcription factor binding site (TFBS) identification in modified rDNA
+# rDNA haplotype-specific silencing due to underlying differential TF binding in mice 
 
-Project: Ribosomal DNA haplotype-specific silencing due to underlying differential transcription factor binding in _Mus musculus_
+This is a R pipeline (R version 4.5.3) built and ran primarily on Kings College London's HPC for the project "Ribosomal DNA haplotype-specific silencing due to underlying differential transcription factor binding in _Mus musculus_" as a part of the module "7BBG1006 Extended Research Project in Applied Bioinformatics 25-26". This work was done under my supervisor Dr. Michelle Holland at the Department of Medical and Molecular Genetics. 
 
-Module: 7BBG1006 Extended Research Project in Applied Bioinformatics 25-26 
 Author: Yanjing Zhang 
-Date: 6 July 2026 
+Date: 16 July 2026 
 
-R pipeline built for bioinformatics analysis of "Ribosomal DNA haplotype-specific silencing due to underlying differential transcription factor binding in _Mus musculus_" as part of the Holland Laboratory, Kings College London.  
+## Table of content 
 
-Databases used: JASPAR2020 and single-cell data from ENCODE 
-
-Ribosomal DNA (rDNA) sequence and haplotype-specific single nucleotide variants (SNVs) source: [Rodriguez-Algarra _et al._, 2022](https://link.springer.com/article/10.1186/s13059-022-02617-x)
+00_setup.Rmd --- setting up mamba environment in the HPC, downloading R packages required for analysis 
+01_initial_pipeline.Rmd --- initial pipeline built and tested on mice TF Runx1 before upscaling
+02_TFBS_analysis.Rmd
