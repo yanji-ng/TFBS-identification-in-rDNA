@@ -7,8 +7,8 @@ Date: 16 July 2026
 
 ## Table of content 
 
-00_setup.Rmd --- setting up mamba environment in the HPC, downloading R packages required for analysis  
-01_initial_pipeline.Rmd --- initial pipeline built and tested on mice TF Runx1 before upscaling  
-02_TFBS_analysis.Rmd --- 107 TFs within CORE of JASPAR<br/>
-03_RShiny.Rmd --- using ENCODE single-cell<br/>
-04_ChIPseq_protocol.Rmd  
+00_setup.Rmd --- setting up mamba environment in the HPC, downloading R packages required for analysis 
+
+01_TFBS_analysis.Rmd --- using JASPAR<br/> 
+02_RShiny.Rmd --- using ENCODE single-cell<br/> 
+03_ChIPseq_protocol.Rmd<br/> 

@@ -1,0 +1,447 @@
+# loading cleaned data 
+
+setwd("/Users/yzk/Desktop/TFBS-Analysis/TFBS-Analysis") #R script folder
+load("../input.RData") #loaded data_raw, data_count, data_tpm, ref_gene and ref_sample
+
+library(shiny)
+library(tidyverse)
+
+head(data_count)
+# A tibble: 6 × 1,241
+#gene_id            ENCFF004ONC ENCFF004VJI ENCFF005JSJ ENCFF005LTG
+#<chr>                    <dbl>       <dbl>       <dbl>       <dbl>
+#1 ENSMUSG00000000001        1430        6826        1359       10391
+#2 ENSMUSG00000000003           0           0           0           0
+#3 ENSMUSG00000000028          66          76          54          70
+#4 ENSMUSG00000000031           1           1           0           3
+#5 ENSMUSG00000000037           1           1           6           5
+#6 ENSMUSG00000000049           0           0           0           0
+# ℹ 1,236 more variables: ENCFF009QVN <dbl>, ENCFF011JXP <dbl>,
+#   ENCFF012PZU <dbl>, ENCFF014AUY <dbl>, ENCFF014XCM <dbl>,
+#   ENCFF015API <dbl>, ENCFF016KVC <dbl>, ENCFF019DYA <dbl>,
+#   ENCFF020DZG <dbl>, ENCFF021EQT <dbl>, ENCFF021HCI <dbl>,
+#   ENCFF021KRO <dbl>, ENCFF023ZWN <dbl>, ENCFF024FVV <dbl>,
+#   ENCFF024PZO <dbl>, ENCFF025JHX <dbl>, ENCFF025TXC <dbl>,
+#   ENCFF025XCK <dbl>, ENCFF029OPO <dbl>, ENCFF030NEC <dbl>, …
+
+head(data_tpm)
+# A tibble: 6 × 1,241
+#gene_id            ENCFF004ONC ENCFF004VJI ENCFF005JSJ ENCFF005LTG
+#<chr>                    <dbl>       <dbl>       <dbl>       <dbl>
+#1 ENSMUSG00000000001    14.4        35.0         29.9        75.1   
+#2 ENSMUSG00000000003     0           0            0           0     
+#3 ENSMUSG00000000028     0.618       0.362        1.10        0.471 
+#4 ENSMUSG00000000031     0.0134      0.00680      0           0.0288
+#5 ENSMUSG00000000037     0.00540     0.00275      0.0708      0.0194
+#6 ENSMUSG00000000049     0           0            0           0     
+# ℹ 1,236 more variables: ENCFF009QVN <dbl>, ENCFF011JXP <dbl>,
+#   ENCFF012PZU <dbl>, ENCFF014AUY <dbl>, ENCFF014XCM <dbl>,
+#   ENCFF015API <dbl>, ENCFF016KVC <dbl>, ENCFF019DYA <dbl>,
+#   ENCFF020DZG <dbl>, ENCFF021EQT <dbl>, ENCFF021HCI <dbl>,
+#   ENCFF021KRO <dbl>, ENCFF023ZWN <dbl>, ENCFF024FVV <dbl>,
+#   ENCFF024PZO <dbl>, ENCFF025JHX <dbl>, ENCFF025TXC <dbl>,
+#   ENCFF025XCK <dbl>, ENCFF029OPO <dbl>, ENCFF030NEC <dbl>, …
+
+head(ref_gene)
+# A tibble: 6 × 3
+#gene_id            gene_name width
+#<chr>              <chr>     <int>
+#1 ENSMUSG00000000001 Gnai3      3262
+#2 ENSMUSG00000000003 Pbsn        902
+#3 ENSMUSG00000000028 Cdc45      3506
+#4 ENSMUSG00000000031 H19        2460
+#5 ENSMUSG00000000037 Scml2      6079
+#6 ENSMUSG00000000049 Apoh       1594
+
+head(ref_sample)
+# A tibble: 6 × 11
+#Accession   Assay Description Lab   Biosample.class Biosample.term
+#<chr>       <chr> <chr>       <chr> <chr>           <chr>         
+#1 ENCBS253EN… poly… The librar… Thom… tissue          central nervo…
+#2 ENCBS253EN… poly… The librar… Thom… tissue          central nervo…
+#3 ENCBS253EN… poly… The librar… Thom… tissue          central nervo…
+#4 ENCBS253EN… poly… The librar… Thom… tissue          central nervo…
+#5 ENCBS253EN… poly… The librar… Thom… tissue          central nervo…
+#6 ENCBS253EN… poly… The librar… Thom… tissue          central nervo…
+# ℹ 5 more variables: Stage <chr>, Age <chr>, Strain <chr>,
+#   Files <chr>, .groups <chr>
+
+print(ref_sample$Biosample.class) #two types: either tissues of primary cell 
+print(ref_sample$Stage) #there is unknown to exclude - perhaps add the count of unknown samples to display out of total for this gene
+
+valid_genes <- ref_gene %>% 
+  filter(!is.na(gene_id) & !is.na(gene_name))
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+  titlePanel("Gene expression of the selected transcription factor"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      selectizeInput(
+        inputId = "selected_gene",
+        label = "Select a transcription factor gene:",
+        choices = setNames(valid_genes$gene_id, valid_genes$gene_name),
+        selected = valid_genes$gene_id)
+    ), 
+    #checkboxInput("sig_only",label = "", value = TRUE),
+    mainPanel(
+      tabsetPanel(
+        type = "tabs",
+        tabPanel("Developmental-stage-specific", plotOutput("stagePlot"),
+                 br(), #for visuals
+                 strong(textOutput("stageInfo"))
+        ),
+        tabPanel("Tissue-specific",plotOutput("tissuePlot")),
+        tabPanel("Cell-type-specific", plotOutput("cellPlot")),
+        tabPanel("Expression Matrix", plotOutput("dotPlot")),
+        tabPanel("Spread of tissue-specific (per experiment)", plotOutput("samplePlot")),
+        tabPanel("Spread of cell-type-specific (per experiment)", plotOutput("samplePlot2"))
+      )
+    )
+  )
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output, session) {
+  
+  #define processed data to just include data based on the selected gene
+  processed_data <- reactive({
+    req(input$selected_gene)
+    
+    target_gene_info <- ref_gene %>% filter(gene_id == input$selected_gene)
+    
+    #incase there isnt a gene name
+    target_id <- target_gene_info %>% pull(gene_id)
+    target_name <- target_gene_info %>% pull(gene_name)
+    if(length(target_name) == 0 || is.na(target_name)) target_name <- target_id 
+    
+    #reshape tpm data into long format, pivot all sample columns where ref_samples$Files == rows of tpm data 
+    gene_long <- data_tpm %>% 
+      filter (gene_id == target_id) %>%
+      tidyr::pivot_longer(cols= -gene_id, names_to = "Files", values_to = "tpm") %>% #joins it into one row
+      mutate(log2_tpm = log2(tpm + 1))
+
+    #handle cs file strings in ref_sample and map to tissues 
+    samples <- ref_sample %>%
+      select(Files, Biosample.class, Biosample.term, Stage) %>%
+      tidyr::separate_rows(Files, sep = ",")
+    
+    #defines res$data
+    list(
+        data = gene_long %>% inner_join(samples, by = "Files"),
+        name = target_name
+    )
+  })
+  
+    #tab1 - dev stage specific plot  
+    output$stagePlot <- renderPlot({
+      res <- processed_data()
+      req(res)
+      
+      plot_subset <- res$data %>% 
+        filter(Stage != "unknown")
+      
+      gene_label <- paste(res$name, "expression")
+      
+      stage_mean <- plot_subset %>%
+        group_by(Stage) %>% 
+        summarise(Expression = mean(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+        mutate(Type = paste(gene_label))
+      
+      stage_median <- plot_subset %>%
+        group_by(Stage) %>% 
+        summarise(Expression = median(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+        mutate(Type = "median expression")
+      
+      plot_data <- bind_rows(stage_mean, stage_median) %>%
+        mutate(Type = factor(Type, levels = c(gene_label, "median expression")))
+      
+      #order based on expression levels 
+      stage_order <- stage_mean %>% arrange(desc(Expression)) %>% pull(Stage)
+      plot_data <- plot_data %>% 
+        filter(Stage %in% stage_order) %>%
+        mutate(Stage = factor(Stage, levels = stage_order))
+      
+      ggplot(plot_data, aes(x = Stage, y = Expression, fill = Type)) + 
+        geom_col(position = position_dodge(width = 0.8), colour = "black", width = 0.7) + 
+        scale_x_discrete(drop = FALSE) +
+        scale_fill_manual(values = c("median expression" = "#D3D3D3", setNames("#A680B8", gene_label))) + 
+        labs(y = expression (paste(log[2], "(TPM + 1)")), x = NULL, fill = NULL) + 
+        guides(fill = guide_legend(nrow =1, byrow = TRUE)) + 
+        theme_classic(base_size = 14) + 
+        theme(
+          axis.text.x = element_text(angle = 35, hjust = 1, face = "bold", color = "black"),
+          axis.line = element_line(linewidth = 0.5, color = "black"),
+          legend.position = "top",
+          legend.background = element_blank()
+        )
+    })
+    
+    #tab 1 - text below to show proportion of no. of unknown to total samples 
+    output$stageInfo <- renderText({
+      res <- processed_data()
+      req(res) #res is db also filtered down to selected gene 
+    
+      #only keep samples where the gene is actively expressed 
+      new <- res$data %>% filter(tpm > 0)
+      
+      total_samples <- nrow(new)
+      
+      total_unknown_samples <- new %>% 
+        filter(Stage == "unknown") %>% 
+        nrow()
+      
+      paste0("There are ", total_unknown_samples, " sample(s) with an 'unknown' Developmental Stage out of ", total_samples, " total samples mapped for the transcription factor gene selected.")
+    })
+    
+      #tab2 - tissue specific plot 
+      output$tissuePlot <- renderPlot({
+        res <- processed_data()
+        req(res)
+        
+        plot_subset <- res$data %>% filter(Biosample.class == "tissue")
+        gene_label <- paste(res$name, "expression")
+        
+        tissue_mean <- plot_subset %>%
+          group_by(Biosample.term) %>% 
+          summarise(Expression = mean(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+          mutate(Type = paste(gene_label))
+        
+        tissue_median <- plot_subset %>%
+          group_by(Biosample.term) %>% 
+          summarise(Expression = median(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+          mutate(Type = "median expression")
+        
+        plot_data <- bind_rows(tissue_mean, tissue_median) %>%
+          mutate(Type = factor(Type, levels = c(gene_label, "median expression")))
+        
+        #order based on expression levels 
+        tissue_order <- tissue_mean %>% arrange(desc(Expression)) %>% pull(Biosample.term)
+        plot_data <- plot_data %>% 
+          filter(Biosample.term %in% tissue_order) %>%
+          mutate(Biosample.term = factor(Biosample.term, levels = tissue_order))
+        
+        ggplot(plot_data, aes(x = Biosample.term, y = Expression, fill = Type)) + 
+          geom_col(position = position_dodge(width = 0.8), colour = "black", width = 0.7) + 
+          scale_fill_manual(values = c("median expression" = "#D3D3D3", setNames("#A680B8", gene_label))) + 
+          labs(y = expression (paste(log[2], "(TPM + 1)")), x = NULL, fill = NULL) + 
+          guides(fill = guide_legend(nrow =1, byrow = TRUE)) + 
+          theme_classic(base_size = 14) + 
+          theme(
+            axis.text.x = element_text(angle = 35, hjust = 1, face = "bold", color = "black"),
+            axis.line = element_line(linewidth = 0.5, color = "black"),
+            legend.position = "top",
+            legend.background = element_blank()
+          )
+      })
+      
+      #tab3 - cell specific plot 
+      output$cellPlot <- renderPlot({
+        res <- processed_data()
+        req(res)
+        
+        plot_subset <- res$data %>% filter(Biosample.class == "primary cell")
+        gene_label <- paste(res$name, "expression")
+        
+        cell_mean <- plot_subset %>%
+          group_by(Biosample.term) %>% 
+          summarise(Expression = mean(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+          mutate(Type = paste(gene_label))
+        
+        cell_median <- plot_subset %>%
+          group_by(Biosample.term) %>% 
+          summarise(Expression = median(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+          mutate(Type = "median expression")
+        
+        plot_data <- bind_rows(cell_mean, cell_median) %>%
+          mutate(Type = factor(Type, levels = c(gene_label, "median expression")))
+        
+        #order based on expression levels 
+        cell_order <- cell_mean %>% arrange(desc(Expression)) %>% pull(Biosample.term)
+        plot_data <- plot_data %>% 
+          filter(Biosample.term %in% cell_order) %>%
+          mutate(Biosample.term = factor(Biosample.term, levels = cell_order))
+        
+        ggplot(plot_data, aes(x = Biosample.term, y = Expression, fill = Type)) + 
+          geom_col(position = position_dodge(width = 0.8), colour = "black", width = 0.7) + 
+          scale_fill_manual(values = c("median expression" = "#D3D3D3", setNames("#A680B8", gene_label))) + 
+          labs(y = expression (paste(log[2], "(TPM + 1)")), x = NULL, fill = NULL) + 
+          guides(fill = guide_legend(nrow =1, byrow = TRUE)) + 
+          theme_classic(base_size = 14) + 
+          theme(
+            axis.text.x = element_text(angle = 35, hjust = 1, face = "bold", color = "black"),
+            axis.line = element_line(linewidth = 0.5, color = "black"),
+            legend.position = "top",
+            legend.background = element_blank()
+          )
+      })
+      
+      #expressionmatrix
+      output$dotPlot <- renderPlot ({
+        res <- processed_data()
+        req(res)
+        
+        plot_subset <- res$data %>% 
+          filter(Stage != "unknown" & Biosample.class == "tissue") %>% 
+          group_by (Biosample.term, Stage) %>%
+          summarise(mean_log2_tpm = mean(log2_tpm, na.rm = TRUE), .groups = 'drop') 
+        
+        ggplot(plot_subset, aes(x=Biosample.term, y =Stage, fill = mean_log2_tpm)) + 
+          geom_point(shape = 21, size = 9, colour = "#2E2528") + 
+          scale_fill_viridis_c(
+            option = "magma", 
+            direction = -1, 
+            name = bquote(log[2](TPM[.(res$name)] + 1))
+          ) + 
+          scale_x_discrete(expand = expansion(mult = c(0.3,0.3)), position = "top") + 
+          theme_minimal(base_size = 14) + 
+          theme(
+            axis.title = element_blank(),
+            axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", colour = "black"),
+            axis.text.y = element_text(face = "bold", colour = "black"), 
+            panel.grid.major = element_blank(), 
+            panel.grid.minor = element_blank(),
+            axis.line.y.left = element_line(color = "black", linewidth = 0.6),
+            axis.line.x.top = element_line(color = "black", linewidth = 0.6),
+            axis.ticks = element_line(color = "black"),
+            legend.position = "bottom",
+            legend.key.width = unit(1.8, "cm"),
+            plot.margin = margin(t = 10, r = 15, b = 15, l = 15)
+          )
+        
+      })
+      
+      #experiment-specific plots: tissue 
+      output$samplePlot <- renderPlot({
+        res <- processed_data()
+        req(res)
+        
+        plot_subset <- res$data %>% filter(Biosample.class == "tissue")
+        gene_label <- paste(res$name, "expression")
+        
+        tissue_mean <- plot_subset %>%
+          group_by(Biosample.term) %>% 
+          summarise(Expression = mean(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+          mutate(Type = paste(gene_label))
+        
+        tissue_median <- plot_subset %>%
+          group_by(Biosample.term) %>% 
+          summarise(Expression = median(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+          mutate(Type = "median expression")
+        
+        plot_data <- bind_rows(tissue_mean, tissue_median) %>%
+          mutate(Type = factor(Type, levels = c(gene_label, "median expression")))
+        
+        #order based on expression levels 
+        tissue_order <- tissue_mean %>% arrange(desc(Expression)) %>% pull(Biosample.term)
+        plot_data <- plot_data %>% 
+          filter(Biosample.term %in% tissue_order) %>%
+          mutate(Biosample.term = factor(Biosample.term, levels = tissue_order))
+        
+        #1. compute the tissue-wide median log2_tpm for each tissue 
+        tissue_medians <- plot_subset %>%
+          group_by(Biosample.term) %>%
+          summarise(tissue_median = median(log2_tpm, na.rm = TRUE), .groups = "drop")
+        
+        #2. per file, mean log2_tpm (multiple rows per file) joined to tissue median 
+        point_data <- plot_subset %>%
+          group_by(Biosample.term, Files) %>%
+          summarise(file_mean_log2 = mean(log2_tpm, na.rm = TRUE), .groups = "drop") %>%
+          left_join(tissue_medians, by = "Biosample.term") %>%
+          mutate(
+            log2_fc = file_mean_log2 - tissue_median,   # subtraction in log space = fold change
+            Biosample.term = factor(Biosample.term, levels = tissue_order)
+          )
+        
+        ggplot(plot_data, aes(x = Biosample.term, y = Expression, fill = Type)) + 
+          geom_col(position = position_dodge(width = 0.8), colour = "black", width = 0.7) + 
+          geom_jitter(
+            data = point_data,
+            aes(x = Biosample.term, y = file_mean_log2),   # raw log2_tpm per file
+            position = position_nudge(x = 0),
+            size = 1.5,
+            alpha = 0.6,
+            colour = "black",
+            inherit.aes = FALSE
+          ) + 
+          scale_fill_manual(values = c("median expression" = "#D3D3D3", setNames("#A680B8", gene_label))) + 
+          labs(y = expression (paste(log[2], "(TPM + 1)")), x = NULL, fill = NULL) + 
+          guides(fill = guide_legend(nrow =1, byrow = TRUE)) + 
+          theme_classic(base_size = 14) + 
+          theme(
+            axis.text.x = element_text(angle = 35, hjust = 1, face = "bold", color = "black"),
+            axis.line = element_line(linewidth = 0.5, color = "black"),
+            legend.position = "top",
+            legend.background = element_blank()
+          )
+      })
+      
+      #experiment-specific plots: cell-type  
+      output$samplePlot2 <- renderPlot({
+        res <- processed_data()
+        req(res)
+        
+        plot_subset <- res$data %>% filter(Biosample.class == "primary cell")
+        gene_label <- paste(res$name, "expression")
+        
+        tissue_mean <- plot_subset %>%
+          group_by(Biosample.term) %>% 
+          summarise(Expression = mean(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+          mutate(Type = paste(gene_label))
+        
+        tissue_median <- plot_subset %>%
+          group_by(Biosample.term) %>% 
+          summarise(Expression = median(log2_tpm, na.rm = TRUE), .groups = 'drop') %>%
+          mutate(Type = "median expression")
+        
+        plot_data <- bind_rows(tissue_mean, tissue_median) %>%
+          mutate(Type = factor(Type, levels = c(gene_label, "median expression")))
+        
+        #order based on expression levels 
+        tissue_order <- tissue_mean %>% arrange(desc(Expression)) %>% pull(Biosample.term)
+        plot_data <- plot_data %>% 
+          filter(Biosample.term %in% tissue_order) %>%
+          mutate(Biosample.term = factor(Biosample.term, levels = tissue_order))
+        
+        #1. compute the tissue-wide median log2_tpm for each tissue 
+        tissue_medians <- plot_subset %>%
+          group_by(Biosample.term) %>%
+          summarise(tissue_median = median(log2_tpm, na.rm = TRUE), .groups = "drop")
+        
+        #2. per file, mean log2_tpm (multiple rows per file) joined to tissue median 
+        point_data <- plot_subset %>%
+          group_by(Biosample.term, Files) %>%
+          summarise(file_mean_log2 = mean(log2_tpm, na.rm = TRUE), .groups = "drop") %>%
+          left_join(tissue_medians, by = "Biosample.term") %>%
+          mutate(
+            log2_fc = file_mean_log2 - tissue_median,   # subtraction in log space = fold change
+            Biosample.term = factor(Biosample.term, levels = tissue_order)
+          )
+        
+        ggplot(plot_data, aes(x = Biosample.term, y = Expression, fill = Type)) + 
+          geom_col(position = position_dodge(width = 0.8), colour = "black", width = 0.7) + 
+          geom_jitter(
+            data = point_data,
+            aes(x = Biosample.term, y = file_mean_log2),   # raw log2_tpm per file
+            position = position_nudge(x = 0),
+            size = 1.5,
+            alpha = 0.6,
+            colour = "black",
+            inherit.aes = FALSE
+          ) + 
+          scale_fill_manual(values = c("median expression" = "#D3D3D3", setNames("#A680B8", gene_label))) + 
+          labs(y = expression (paste(log[2], "(TPM + 1)")), x = NULL, fill = NULL) + 
+          guides(fill = guide_legend(nrow =1, byrow = TRUE)) + 
+          theme_classic(base_size = 14) + 
+          theme(
+            axis.text.x = element_text(angle = 35, hjust = 1, face = "bold", color = "black"),
+            axis.line = element_line(linewidth = 0.5, color = "black"),
+            legend.position = "top",
+            legend.background = element_blank()
+          )
+      })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
