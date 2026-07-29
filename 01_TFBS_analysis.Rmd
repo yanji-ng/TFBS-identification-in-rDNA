@@ -1,4 +1,4 @@
-## Objectives:
+## objectives:
 
 # 1.build pipeline for control (Runx1 MA0002.3 on JASPAR)
 
@@ -38,304 +38,763 @@ module load r R
 
 setwd("/scratch/prj/mmg_holland_sandbox/Yanjing") dir.create("Runx1") setwd("./Runx1")
 
-library(JASPAR2020) library(TFBSTools) library(Biostrings) library(dplyr) library(GenomicRanges) library(purrr) library(ggplot2) library(scales) library(seqLogo) library(tidyr) library(readxl)
+library(TFBSTools)
+library(JASPAR2020)
 
-# setting path of reference rDNA seqeunce to search in and loading it
+library(Biostrings)
+library(tidyr)
+library(dplyr)
+library(seqLogo)
+library(purrr)
+library(ggplot2)
+library(scales)
+library(readxl)
+library(GenomicRanges)
 
-fa_path \<- "/scratch/prj/mmg_holland_sandbox/\_genomes/mouse/GRCm38.p0/rdna/BK000964.3.looped.fasta" fa_genome \<- readDNAStringSet(fa_path, use.names = TRUE) fa_seq \<- fa_genome[[1]]
+fa_path <- "/scratch/prj/mmg_holland_sandbox/_genomes/mouse/GRCm38.p0/rdna/BK000964.3.looped.fasta"
+
+#load modified rDNA sequence 
+fa_genome <- readDNAStringSet(fa_path, use.names = TRUE)
+fa_seq <- fa_genome[[1]]
 
 #extract Runx1 data from JASPAR2020 database
 
-pfm \<- getMatrixByID(JASPAR2020, ID="MA0002.2") pwm \<- toPWM(pfm, type="log2probratio", pseudocounts=0.8, bg=c(A=0.25, C=0.25, G=0.25, T=0.25)) #default background settings
+pfm <- getMatrixByID(JASPAR2020, ID="MA0002.2")
+pwm <- toPWM(pfm, type="log2probratio", pseudocounts=0.8,
+             bg=c(A=0.25, C=0.25, G=0.25, T=0.25)) #default background settings 
 
-subject \<- DNAString(fa_seq)
+subject <- DNAString(fa_seq)
 
-################################################# 
+#distribution of hits 
 
-### Distribution of hits
+setwd("/scratch/prj/mmg_holland_sandbox/Yanjing/Runx1/distribution_of_hits")
 
-################################################# 
+scores <- seq(50,95, by = 5)
 
-dir.create("distribution_of_hits") setwd("./distribution_of_hits")
+for (s in scores) {
+    min_score <- paste0(s, "%")
+    siteset <- searchSeq(pwm, subject, seqname="modified_rDNA", min.score=min_score, strand="+")
+    siteset_df <- as.data.frame(siteset)
+    file_name <- paste0("Runx1_", s, ".csv")
+    write.table(siteset_df, file_name, col.names=TRUE) #saving file 
+}
 
-scores \<- seq(50,95, by = 5)
+##Rplot: plotting hits with different min.score set to determine the knee of the graph
 
-for (s in scores) { min_score \<- paste0(s, "%") siteset \<- searchSeq(pwm, subject, seqname="modified_rDNA", min.score=min_score, strand="+") siteset_df \<- as.data.frame(siteset) file_name \<- paste0("Runx1\_", s, ".csv") write.table(siteset_df, file_name, col.names=TRUE) #saving file }
+files <- list.files(path = "./", pattern = "^Runx1.*\\.csv$", full.names = TRUE)
+counts_df <- list.files(path = "./", pattern = "^Runx1.*\\.csv$", full.names = TRUE) %>%
+  set_names() %>%
+  map_df(~ data.frame(row_count = nrow(read.csv(.x))), .id = "file_name")
+  
+counts_df["min.score"] <- scores
+write.table(counts_df, "distribution_of_hits.csv", col.names = TRUE)
 
-## Rplot: curve plot of no. of hits against min.score hits to determine knee of the plots
-
-files \<- list.files(path = "./", pattern = "\^Runx1.\*\\.csv$", full.names = TRUE)
-counts_df <- list.files(path = "./", pattern = "^Runx1.*\\.csv$", full.names = TRUE) %\>% set_names() %\>% map_df(\~ data.frame(row_count = nrow(read.csv(.x))), .id = "file_name")
-
-counts_df["min.score"] \<- scores write.table(counts_df, "distribution_of_hits.csv", col.names = TRUE)
-
-p \<- ggplot(data = counts_df,aes(min.score, row_count)) + geom_point(aes(colour = "red")) + geom_smooth(method="loess", colour="black", se = FALSE) + scale_x_continuous(breaks = seq(50, 95, by = 5)) + labs(x="min.score(%)", y = "Number of hits", title = "Distribution of hits for Runx1") + theme_minimal() + theme(legend.position = "none")
+p <- ggplot(data = counts_df,aes(min.score, row_count)) + geom_point(aes(colour = "red")) + geom_smooth(method="loess", colour="black", se = FALSE) + labs(x="min.score(%)", y = "Number of hits", title = "Distribution of hits for Runx1") + theme_minimal() + theme(legend.position = "none")
 
 ggsave("distribution_of_hits.pdf", plot = p, width = 8, height = 4, dpi = 600)
 
-## Rplot: violin plot to visualise spread, relScore against min.score
+#knee of the plot determined to be at min.score = 75%
 
-violin_table \<- map_df(scores, function(s) { file_name \<- paste0("Runx1\_", s, ".csv") read.table(file_name, header = TRUE) %\>% mutate(min.score = s) %\>% #mutate() is column creator and editor select(relScore, min.score) })
+##Rplot: violin plot with y = relScore, x = min.score 
 
-head(violin_table) \# relScore min.score #1...1 0.6829987 50 #2...2 0.6477694 50 #3...3 0.6661956 50 #4...4 0.5155643 50 #5...5 0.5522765 50 #6...6 0.6002571 50
+violin_table <- map_df(scores, function(s) {
+    file_name <- paste0("Runx1_", s, ".csv")
+    read.table(file_name, header = TRUE) %>% 
+        mutate(min.score = s) %>% #mutate() is column creator and editor
+        select(relScore, min.score)
+})
 
-p_violin \<- ggplot(data = violin_table, aes(x = factor(min.score), y = relScore)) + geom_violin( aes(fill = factor(min.score)), scale = "width", colour = "darkblue", alpha = 0.7 ) + geom_boxplot(width = 0.1, color = "black", outlier.shape = NA) + labs( x = "min.score(%)", y = "relScore", title = "Distribution of relative scores at different thresholds", fill = "min.score(%)") + theme_minimal() + theme(legend.position = "none")
+head(violin_table)
+#       relScore min.score
+#1...1 0.6829987        50
+#2...2 0.6477694        50
+#3...3 0.6661956        50
+#4...4 0.5155643        50
+#5...5 0.5522765        50
+#6...6 0.6002571        50
 
-ggsave("violin_plot.pdf", plot = p_violin, width = 8, height = 4, dpi = 600) #confirmed min.score at 75% is inclusive enough
+p_violin <- ggplot(data = violin_table, aes(x = factor(min.score), y = relScore)) +
+  geom_violin(
+      aes(fill = factor(min.score)),
+      scale = "width",
+      colour = "darkblue",
+      alpha = 0.7
+  ) + geom_boxplot(width = 0.1, color = "black", outlier.shape = NA) + 
+  labs( x = "min.score(%)", y = "relScore", title = "Distribution of relative scores at different thresholds", fill = "min.score(%)") + theme_minimal() + theme(legend.position = "none")
 
-################################################# 
+ggsave("violin_plot.pdf", plot = p_violin, width = 8, height = 4, dpi = 600)
 
-### DNA alignment/search of Runx1 motifs with rDNA
+#confirmed min.score = 75% is inclusive enough 
 
-################################################# 
+setwd("/scratch/prj/mmg_holland_sandbox/Yanjing/Runx1")
+siteset <- searchSeq(pwm, subject, seqname="modified_rDNA", min.score="75%", strand="+")
+head(siteset)
+#An object of class SiteSet with 6 site sequences
+#        seqname source feature start end      score strand frame
+#1 modified_rDNA   TFBS    TFBS   121 131 -0.5357653      +     .
+#2 modified_rDNA   TFBS    TFBS   153 163  5.5944823      +     .
+#3 modified_rDNA   TFBS    TFBS   235 245 -0.4157078      +     .
+#4 modified_rDNA   TFBS    TFBS   281 291  7.7659549      +     .
+#5 modified_rDNA   TFBS    TFBS   291 301  0.9544070      +     .
+#6 modified_rDNA   TFBS    TFBS   327 337  2.6416106      +     .
+#                                               attributes
+#1 TF=RUNX1;class=Runt domain factors;sequence=CGATGAGGGGA
+#2 TF=RUNX1;class=Runt domain factors;sequence=TTTTCTGGCCA
+#3 TF=RUNX1;class=Runt domain factors;sequence=AGCACTGTTTT
+#4 TF=RUNX1;class=Runt domain factors;sequence=GGGTGTGGGTG
+#5 TF=RUNX1;class=Runt domain factors;sequence=GAGTGAGGGCG
+#6 TF=RUNX1;class=Runt domain factors;sequence=GTGAGTGGCCG
 
-setwd("..") siteset \<- searchSeq(pwm, subject, seqname="modified_rDNA", min.score="75%", strand="+") head(siteset) #An object of class SiteSet with 6 site sequences \# seqname source feature start end score strand frame #1 modified_rDNA TFBS TFBS 121 131 -0.5357653 + . #2 modified_rDNA TFBS TFBS 153 163 5.5944823 + . #3 modified_rDNA TFBS TFBS 235 245 -0.4157078 + . #4 modified_rDNA TFBS TFBS 281 291 7.7659549 + . #5 modified_rDNA TFBS TFBS 291 301 0.9544070 + . #6 modified_rDNA TFBS TFBS 327 337 2.6416106 + . \# attributes #1 TF=RUNX1;class=Runt domain factors;sequence=CGATGAGGGGA #2 TF=RUNX1;class=Runt domain factors;sequence=TTTTCTGGCCA #3 TF=RUNX1;class=Runt domain factors;sequence=AGCACTGTTTT #4 TF=RUNX1;class=Runt domain factors;sequence=GGGTGTGGGTG #5 TF=RUNX1;class=Runt domain factors;sequence=GAGTGAGGGCG #6 TF=RUNX1;class=Runt domain factors;sequence=GTGAGTGGCCG
+#parameters: 
+head(writeGFF3(siteset))
+relScore(siteset)
+# pvalues(siteset, type="TFMPvalue")
+# pvalues(siteset, type="sampling") 
 
-siteset_df \<- as.data.frame(siteset)
+siteset_df <- as.data.frame(siteset)
+write.table(siteset_df, "Runx1_75.csv", col.names=TRUE)
 
-## Rplot: producing ICM for these motifs found in rDNA to produce seqLogo
-
-seqs \<- siteset_df\$siteSeqs pfm \<- consensusMatrix(DNAStringSet(seqs))
+##Rplot: ICM for motifs of Runx1 mapped with rDNA at min.score = 75% 
+seqs <- siteset_df$siteSeqs 
+pfm <- consensusMatrix(DNAStringSet(seqs)) #convert and create a consensus matrix
 
 # consensusMatrix() added empty M & R rows, we remove them:
 
-pfm \<- pfm[c("A", "C", "G", "T"), ] head(pfm)
+# detach("package:TFBSTools", unload = TRUE)
+pfm <- pfm[c("A", "C", "G", "T"), ]
+head(pfm) #data is in counts of occurrences of ACGT 
+# convert counts to proportions 
+pfm_norm <- prop.table(pfm, margin = 2)
+p <- makePWM(pfm_norm)
+# save 
+pdf("Runx1_75.pdf", width = 7, height = 5)
+seqLogo(p)
+dev.off() #tells R to stop painting
 
-#data is in counts of occurrences of ACGT thus convert counts to proportions
+## Rplot: mapping TFBS to modified rDNA (3.08k at the end is joint to the beginning)
+#note: TFBSs are adjusted to modified rDNA positions but the x-axis was shifted by -3.08k to the left, graphs are technically 1k off) 
 
-pfm_norm \<- prop.table(pfm, margin = 2) p \<- makePWM(pfm_norm)
-
-pdf("Runx1_75.pdf", width = 7, height = 5) #save sequence logo seqLogo(p) dev.off() #tells R to stop painting
-
-## Rplot: mapping TFBS to modified rDNA sequence (starts at -3.08kb)
-
-p_mapping \<- ggplot (data = siteset_df, aes(start - 3008)) + geom_histogram(bins = 500) + labs (title = "Runx1 binding sites", x = "Position (kb)", y = "Number of binding sites per 500 bp window") + theme_minimal() + scale_x_continuous(labels = label_number(scale = 1e-3, suffix = "k"), limits = c(-2300,13500)) #data removed outside of [-2.3kb, 13.5kb]
+p_mapping <- ggplot (data = siteset_df, aes(start - 3008)) + geom_histogram(bins = 500) + labs (title = "Runx1 binding sites", x = "Position (kb)", y = "Number of binding sites per 500 bp window") + theme_minimal() + scale_x_continuous(labels = label_number(scale = 1e-3, suffix = "k"), limits = c(-2300,13500)) #data removed outside of [-2.3kb, 13.5kb]
 
 # load supplementary data with SNVs, within [-2293,13357] originally
+snv <- read_excel("/scratch/prj/mmg_holland_sandbox/Yanjing/supplementary_data/13059_2022_2617_MOESM2_ESM.xlsx", sheet = 1)
 
-snv \<- read_excel("/scratch/prj/mmg_holland_sandbox/Yanjing/supplementary_data/13059_2022_2617_MOESM2_ESM.xlsx", sheet = 1)
+# converting SNV positions to match that of modified rDNA: 
 
-# converting SNV positions to match that of modified rDNA:
+# original code 
+# ref_pos <- c(-133, -132. -104) # 2876, 2877 & 2905 
+# ref_pos <- ifelse(ref_pos >= 1, ref_pos + 3008, ref_pos + 1 + 3008) 
 
-# original code
+# modified code 
+ref_pos <- snv$SNV
+ref_pos <- ifelse(ref_pos >= 1, ref_pos + 3008, ref_pos + 1 + 3008)
 
-# ref_pos \<- c(-133, -132. -104) \# 2876, 2877 & 2905
-
-# ref_pos \<- ifelse(ref_pos \>= 1, ref_pos + 3008, ref_pos + 1 + 3008)
-
-# modified code
-
-ref_pos \<- snv\$SNV ref_pos \<- ifelse(ref_pos \>= 1, ref_pos + 3008, ref_pos + 1 + 3008)
-
-snv\$ref_pos \<- ref_pos snv \<- snv %\>% select (SNV,ref_pos, REF, ALT, Haplotype) %\>% rename(original = SNV, modified = ref_pos, target_base = REF, alt_base = ALT, haplotype = Haplotype)
+snv$ref_pos <- ref_pos
+snv <- snv %>% 
+    select (SNV,ref_pos, REF, ALT, Haplotype) %>% 
+    rename(original = SNV, modified = ref_pos, target_base = REF, alt_base = ALT, haplotype = Haplotype)
 
 write.table(snv, "/scratch/prj/mmg_holland_sandbox/Yanjing/supplementary_data/snv.csv", col.names=TRUE)
 
-p_rug \<- p_mapping + geom_rug(data = data.frame(ref_pos), aes(x = ref_pos - 3008), sides = "b", colour = "red", alpha = 0.5)
+p_rug <- p_mapping + 
+  geom_rug(data = data.frame(ref_pos), 
+           aes(x = ref_pos - 3008), 
+           sides = "b", 
+           colour = "red", 
+           alpha = 0.5) 
 
-ggsave("rug_plot.pdf", plot = p_rug, width = 8, height = 4)
+ggsave("rug_plot.pdf", plot = p_rug, width = 8, height = 4) 
 
-# mapping hits (TFBS-rDNA) to SNVs:
+# mapping hits (TFBS-rDNA) to SNVs: 
+snv_range <- GRanges(
+    seqnames = "modified_rDNA",
+    ranges = IRanges(start=ref_pos, end=ref_pos), #SNV coordinate 
+    strand = '+')
 
-snv_range \<- GRanges( seqnames = "modified_rDNA", ranges = IRanges(start=ref_pos, end=ref_pos), #SNV coordinate strand = '+')
+hits_range <- makeGRangesFromDataFrame(siteset_df, keep.extra.columns=TRUE)
+hits_range$snv_presence <- countOverlaps(hits_range, snv_range) #y is mapped to x and [x,y] 
+snv_hits <- hits_range[hits_range$snv_presence > 0]
+length(snv_hits) # 29 out of 1885
+    #1 means SNV falls within exactly one region (inside specific gene) 
+    #2 means SNV falls in area where multiple regions overlap 
 
-hits_range \<- makeGRangesFromDataFrame(siteset_df, keep.extra.columns=TRUE) hits_range$snv_presence <- countOverlaps(hits_range, snv_range) #y is mapped to x and [x,y]
-snv_hits <- hits_range[hits_range$snv_presence \> 0] length(snv_hits) \# 29 out of 1885 #1 means SNV falls within exactly one region (inside specific gene) #2 means SNV falls in area where multiple regions overlap
-
-# hits not covered by SNVs:
-
+# hits not covered by SNVs: 
 snv_range$overlap_count <-countOverlaps(snv_range, hits_range)
-abs_snv <- snv_range[snv_range$overlap_count == 0] #there is absolutely no coverage on the SNV length(abs_snv) \# 60
+abs_snv <- snv_range[snv_range$overlap_count == 0] #there is absolutely no coverage on the SNV
+length(abs_snv) # 60
 
 snv_range$is_matched <- countOverlaps(snv_range, hits_range) > 0
-sum(snv_range$is_matched == TRUE) #28
+sum(snv_range$is_matched == TRUE) #28 
 
 snv_range$not_matched <- countOverlaps(snv_range, hits_range) == 0
 sum(snv_range$not_matched == TRUE) #60 - this is in respect to SNVs being covered by hits (of TFBS mapped to rDNA) which should add up to the total no. of SNVs (88)
 
-head(snv_range) \# seqnames ranges strand \| overlap_count is_matched not_matched \# <Rle> <IRanges> <Rle> \| <integer> <logical> <logical> \# [1] modified_rDNA 716 + \| 0 FALSE TRUE \# [2] modified_rDNA 795 + \| 1 TRUE FALSE \# [3] modified_rDNA 1232 + \| 1 TRUE FALSE \# [4] modified_rDNA 1596 + \| 0 FALSE TRUE \# [5] modified_rDNA 1608 + \| 0 FALSE TRUE \# [6] modified_rDNA 1617 + \| 0 FALSE TRUE
+head(snv_range)
+#           seqnames    ranges strand | overlap_count is_matched not_matched
+#              <Rle> <IRanges>  <Rle> |     <integer>  <logical>   <logical>
+#  [1] modified_rDNA       716      + |             0      FALSE        TRUE
+#  [2] modified_rDNA       795      + |             1       TRUE       FALSE
+#  [3] modified_rDNA      1232      + |             1       TRUE       FALSE
+#  [4] modified_rDNA      1596      + |             0      FALSE        TRUE
+#  [5] modified_rDNA      1608      + |             0      FALSE        TRUE
+#  [6] modified_rDNA      1617      + |             0      FALSE        TRUE
 
-head(hits_range) \# seqnames ranges strand \| source feature absScore \# <Rle> <IRanges> <Rle> \| <character> <character> <numeric> \# [1] modified_rDNA 121-131 + \| TFBS TFBS -0.535765 \# [2] modified_rDNA 153-163 + \| TFBS TFBS 5.594482 \# [3] modified_rDNA 235-245 + \| TFBS TFBS -0.415708 \# [4] modified_rDNA 281-291 + \| TFBS TFBS 7.765955 \# [5] modified_rDNA 291-301 + \| TFBS TFBS 0.954407 \# [6] modified_rDNA 327-337 + \| TFBS TFBS 2.641611 \# relScore ID TF class siteSeqs \# <numeric> <character> <character> <character> <character> \# [1] 0.771663 MA0002.2 RUNX1 Runt domain factors CGATGAGGGGA \# [2] 0.857922 MA0002.2 RUNX1 Runt domain factors TTTTCTGGCCA \# [3] 0.773352 MA0002.2 RUNX1 Runt domain factors AGCACTGTTTT \# [4] 0.888477 MA0002.2 RUNX1 Runt domain factors GGGTGTGGGTG \# [5] 0.792631 MA0002.2 RUNX1 Runt domain factors GAGTGAGGGCG \# [6] 0.816372 MA0002.2 RUNX1 Runt domain factors GTGAGTGGCCG \# snv_presence \# <integer> \# [1] 0 \# [2] 0 \# [3] 0 \# [4] 0 \# [5] 0 \# [6] 0
+head(hits_range)
+#           seqnames    ranges strand |      source     feature  absScore
+#              <Rle> <IRanges>  <Rle> | <character> <character> <numeric>
+#  [1] modified_rDNA   121-131      + |        TFBS        TFBS -0.535765
+#  [2] modified_rDNA   153-163      + |        TFBS        TFBS  5.594482
+#  [3] modified_rDNA   235-245      + |        TFBS        TFBS -0.415708
+#  [4] modified_rDNA   281-291      + |        TFBS        TFBS  7.765955
+#  [5] modified_rDNA   291-301      + |        TFBS        TFBS  0.954407
+#  [6] modified_rDNA   327-337      + |        TFBS        TFBS  2.641611
+#       relScore          ID          TF               class    siteSeqs
+#      <numeric> <character> <character>         <character> <character>
+#  [1]  0.771663    MA0002.2       RUNX1 Runt domain factors CGATGAGGGGA
+#  [2]  0.857922    MA0002.2       RUNX1 Runt domain factors TTTTCTGGCCA
+#  [3]  0.773352    MA0002.2       RUNX1 Runt domain factors AGCACTGTTTT
+#  [4]  0.888477    MA0002.2       RUNX1 Runt domain factors GGGTGTGGGTG
+#  [5]  0.792631    MA0002.2       RUNX1 Runt domain factors GAGTGAGGGCG
+#  [6]  0.816372    MA0002.2       RUNX1 Runt domain factors GTGAGTGGCCG
+#      snv_presence
+#         <integer>
+#  [1]            0
+#  [2]            0
+#  [3]            0
+#  [4]            0
+#  [5]            0
+#  [6]            0
 
-write.table(snv_range, "hits_mapped_to_snvs.csv") write.table(hits_range, "snvs_mapped_to_hits.csv")
+write.table(snv_range, "hits_mapped_to_snvs.csv")
+write.table(hits_range, "snvs_mapped_to_hits.csv")
 
-## Rplot - box plots:
+## Rplot - box plots: 
+#1) Rate of hits covered by SNVs/total hits 
+rate <- c(nrow(siteset_df),length(snv_hits))
+snv_coverage <- c(88,sum(snv_range$is_matched == TRUE),sum(snv_range$not_matched == TRUE)) #note: 88 is the total no. of SNVs which == nrow(snv)
 
-#1) Rate of hits covered by SNVs/total hits rate \<- c(nrow(siteset_df),length(snv_hits)) snv_coverage \<- c(88,sum(snv_range$is_matched == TRUE),sum(snv_range$not_matched == TRUE)) #note: 88 is the total no. of SNVs which == nrow(snv)
-
-df \<- data.frame(category=c("Total hits","Hits containing SNVs"), count=rate) p \<- ggplot(df,aes(x=factor(category,levels=category),y=count, fill = category)) + geom_bar(stat="identity", colour ="darkgrey") + scale_fill_manual(values = c("skyblue", "salmon")) + labs(title = "Runx1 binding sites in rDNA", x = "", y = "Number of hits") + theme_minimal() + theme(legend.title = element_blank())
+df <- data.frame(category=c("Total hits","Hits containing SNVs"), count=rate)
+p <- ggplot(df,aes(x=factor(category,levels=category),y=count, fill = category)) + 
+    geom_bar(stat="identity", colour ="darkgrey") + 
+    scale_fill_manual(values = c("skyblue", "salmon")) +
+    labs(title = "Runx1 binding sites in rDNA", x = "", y = "Number of hits") +
+    theme_minimal() + theme(legend.title = element_blank(),axis.text.y = element_text(size = 14),
+      axis.title.y = element_text(size = 16))
 
 ggsave("bar_plot_hits.pdf", plot = p, width = 8, height = 8)
 
-#2) SNVs affecting TFBS (88 SNVs) df \<- data.frame(category=c("Total","Covered by hits","Uncovered by hits"), count=snv_coverage) a \<- ggplot(df,aes(x=factor(category,levels=category),y=count, fill = category)) + geom_bar(stat="identity", colour ="darkgrey") + scale_fill_manual(values = c("pink", "salmon", "skyblue")) + labs(title = "Mouse SNVs compared to Runx1 binding sites in rDNA", x = "", y = "Number of SNVs") + theme_minimal() + theme(legend.title = element_blank())
-
+#2) SNVs affecting TFBS (88 SNVs) 
+df <- data.frame(category=c("Total","Covered by hits","Uncovered by hits"), count=snv_coverage)
+a <- ggplot(df,aes(x=factor(category,levels=category),y=count, fill = category)) + 
+    geom_bar(stat="identity", colour ="darkgrey") + 
+    scale_fill_manual(values = c("pink", "salmon", "skyblue")) +
+    labs(title = "Mouse SNVs compared to Runx1 binding sites in rDNA", x = "", y = "Number of SNVs") +
+    theme_minimal() + theme(legend.title = element_blank(),axis.text.y = element_text(size = 14),
+      axis.title.y = element_text(size = 16))
+    
 ggsave("bar_plot_snv.pdf", plot = a, width = 8, height = 8)
 
 # creating results table
+# get covered snv positions 
+snv_covered <- as.data.frame(snv_range) %>% 
+  filter(is_matched == TRUE) %>%
+  pull(start,overlap_count)
 
-# get covered snv positions
-
-snv_covered \<- as.data.frame(snv_range) %\>% filter(is_matched == TRUE) %\>% pull(start,overlap_count)
-
-snv_df \<- as.data.frame(snv) hits_df \<- as.data.frame(hits_range)
+snv_df <- as.data.frame(snv)
+hits_df <- as.data.frame(hits_range)
 
 # expand each TFBS across its 11 positions, filter to SNV positions, add base
+results <- siteset_df %>%
+  mutate(
+    base = strsplit(as.character(siteSeqs), ""),
+    pos  = mapply(seq, start, end, SIMPLIFY = FALSE) #pos=of the affected base on TFBS
+  ) %>%
+  unnest(c(base, pos)) %>% #base affected calculated 
+  filter(pos %in% snv_covered) %>%
+  left_join(hits_df %>% select(start, snv_presence), by = c("start"="start")) %>%
+  left_join(snv_df, by = c("pos" = "modified")) %>% 
+  rename(snv_modified = pos, snv_original = original) %>%
+  select(seqnames, start, end, absScore, relScore, ID, TF, siteSeqs, base, snv_presence, snv_modified, snv_original, target_base, alt_base, haplotype)
 
-results \<- siteset_df %\>% mutate( base = strsplit(as.character(siteSeqs), ""), pos = mapply(seq, start, end, SIMPLIFY = FALSE) #pos=of the affected base on TFBS ) %\>% unnest(c(base, pos)) %\>% #base affected calculated filter(pos %in% snv_covered) %\>% left_join(hits_df %\>% select(start, snv_presence), by = c("start"="start")) %\>% left_join(snv_df, by = c("pos" = "modified")) %\>% rename(snv_modified = pos, snv_original = original) %\>% select(seqnames, start, end, absScore, relScore, ID, TF, siteSeqs, base, snv_presence, snv_modified, snv_original, target_base, alt_base, haplotype)
+# checking that it is correct: all base == target_base 
+all(results$base == results$target_base) #TRUE thus remove base
+results$base <- NULL
 
-# checking that it is correct: all base == target_base
-
-all(results$base == results$target_base) #TRUE thus remove base results\$base \<- NULL
-
-nrow(results) #35 head(results) \# seqnames start end absScore relScore ID TF siteSeqs base snv_presence \# <chr> <int> <int> <dbl> <dbl> <chr> <chr> <chr> <chr> <int> #1 modifie… 788 798 3.55 0.829 MA00… RUNX1 TGTATTG… G 1 #2 modifie… 1232 1242 0.361 0.784 MA00… RUNX1 CGCTTCG… C 1 #3 modifie… 2825 2835 4.47 0.842 MA00… RUNX1 TTCTCCG… G 1 #4 modifie… 3173 3183 1.89 0.806 MA00… RUNX1 GCTTGCG… T 1 #5 modifie… 3177 3187 4.78 0.846 MA00… RUNX1 GCGTGTG… T 1 #6 modifie… 3366 3376 -1.69 0.755 MA00… RUNX1 ACCTCCG… A 1 \# ℹ 5 more variables: snv_modified <dbl>, snv_original <dbl>, \# target_base <chr>, alt_base <chr>, haplotype <chr>
+nrow(results) #35
+head(results)
+#   seqnames start   end absScore relScore ID    TF    siteSeqs base  snv_presence
+#  <chr>    <int> <int>    <dbl>    <dbl> <chr> <chr> <chr>    <chr>        <int>
+#1 modifie…   788   798    3.55     0.829 MA00… RUNX1 TGTATTG… G                1
+#2 modifie…  1232  1242    0.361    0.784 MA00… RUNX1 CGCTTCG… C                1
+#3 modifie…  2825  2835    4.47     0.842 MA00… RUNX1 TTCTCCG… G                1
+#4 modifie…  3173  3183    1.89     0.806 MA00… RUNX1 GCTTGCG… T                1
+#5 modifie…  3177  3187    4.78     0.846 MA00… RUNX1 GCGTGTG… T                1
+#6 modifie…  3366  3376   -1.69     0.755 MA00… RUNX1 ACCTCCG… A                1
+# ℹ 5 more variables: snv_modified <dbl>, snv_original <dbl>,
+#   target_base <chr>, alt_base <chr>, haplotype <chr>
 
 # compare to Runx1 data on JASPAR2020 which is based off of WGS
+pfm <- getMatrixByID(JASPAR2020, ID="MA0002.2") #repeat bcos currently pfm is for TF-rDNA 
+pwm <- toPWM(pfm, type="log2probratio", pseudocounts=0.8,
+             bg=c(A=0.25, C=0.25, G=0.25, T=0.25))
+             
+print(pfm) #for counts 
+#  [,1] [,2] [,3] [,4] [,5] [,6] [,7] [,8] [,9] [,10] [,11]
+#A  287  234  123   57    0   87    0   17   10   131   500
+#C  496  485 1072    0   75  127    0   42  400   463   158
+#G  696  467  149    7 1872   70 1987 1848  251    81   289
+#T  521  814  656 1936   53 1716   13   93 1339  1325  1053
 
-pfm \<- getMatrixByID(JASPAR2020, ID="MA0002.2") #repeat bcos currently pfm is for TF-rDNA pwm \<- toPWM(pfm, type="log2probratio", pseudocounts=0.8, bg=c(A=0.25, C=0.25, G=0.25, T=0.25))
+pfm_mat <- Matrix(pfm)
+colnames(pfm_mat) <- paste0("Pos", 1:ncol(pfm_mat))
 
-print(pfm) #for counts \# [,1] [,2] [,3] [,4] [,5] [,6] [,7] [,8] [,9] [,10] [,11] #A 287 234 123 57 0 87 0 17 10 131 500 #C 496 485 1072 0 75 127 0 42 400 463 158 #G 696 467 149 7 1872 70 1987 1848 251 81 289 #T 521 814 656 1936 53 1716 13 93 1339 1325 1053
+# calculate total 
+pfm_df <- as.data.frame(pfm_mat)
+pfm_table <- rbind(pfm_df, Total = colSums(pfm_df))
+print(pfm_table)
 
-pfm_mat \<- Matrix(pfm) colnames(pfm_mat) \<- paste0("Pos", 1:ncol(pfm_mat))
-
-# calculate total
-
-pfm_df \<- as.data.frame(pfm_mat) pfm_table \<- rbind(pfm_df, Total = colSums(pfm_df)) print(pfm_table)
-
-# Pos1 Pos2 Pos3 Pos4 Pos5 Pos6 Pos7 Pos8 Pos9 Pos10 Pos11
-
-#A 287 234 123 57 0 87 0 17 10 131 500 #C 496 485 1072 0 75 127 0 42 400 463 158 #G 696 467 149 7 1872 70 1987 1848 251 81 289 #T 521 814 656 1936 53 1716 13 93 1339 1325 1053 #Total 2000 2000 2000 2000 2000 2000 2000 2000 2000 2000 2000
+#      Pos1 Pos2 Pos3 Pos4 Pos5 Pos6 Pos7 Pos8 Pos9 Pos10 Pos11
+#A      287  234  123   57    0   87    0   17   10   131   500
+#C      496  485 1072    0   75  127    0   42  400   463   158
+#G      696  467  149    7 1872   70 1987 1848  251    81   289
+#T      521  814  656 1936   53 1716   13   93 1339  1325  1053
+#Total 2000 2000 2000 2000 2000 2000 2000 2000 2000  2000  2000
 
 write.table(pfm_table, "pfm_counts.csv", col.names = TRUE)
 
-# x = start of the BS which starts at 1
+# x = start of the BS which starts at 1 
+# y = position of the SNV 
 
-# y = position of the SNV
-
-x \<- results$start
+x <- results$start
 y <- results$snv_modified
 
-# position z: the base being affected by the SNV on the TFBS sequence i.e. out of 11 for Runx1
+# position z: the base being affected by the SNV on the TFBS sequence i.e. out of 11 for Runx1 
+z = y - x + 1
+head(z) #double checked, length = 35
 
-z = y - x + 1 head(z) #double checked, length = 35
+o <- results$snv_original
 
-o \<- results\$snv_original
-
-df \<- data.frame(snv_original = o, snv_modified = y, position_z = z) df$target_base <- c(results$target_base) df$alt_base <- c(results$alt_base)
+df <- data.frame(snv_original = o, snv_modified = y, position_z = z)
+df$target_base <- c(results$target_base)
+df$alt_base <- c(results$alt_base)
 
 print(df)
 
 write.table(df, "position_z.csv")
 
-# for both ref/target base and alt base calculate the rate: G over total
+# for both ref/target base and alt base calculate the rate: G over total 
 
-totals \<- as.numeric(pfm_table["Total", ]) names(totals) \<- 1:ncol(pfm_mat)
+totals <- as.numeric(pfm_table["Total", ])
+names(totals) <- 1:ncol(pfm_mat)
 
 df$target_rate <- mapply(function(pos, base) {
   val <- pfm_mat[base, pos] / totals[pos]
   if (val == 0) "error" else val
-}, df$position_z, df\$target_base)
+}, df$position_z, df$target_base)
 
 df$alt_rate <- mapply(function(pos, base) {
   val <- pfm_mat[base, pos] / totals[pos]
   if (val == 0) "intolerable" else val
-}, df$position_z, df\$alt_base)
+}, df$position_z, df$alt_base)
 
-t \<- as.numeric(ifelse(df$target_rate == "intolerable", NA, df$target_rate)) a \<- as.numeric(ifelse(df$alt_rate == "intolerable", NA, df$alt_rate))
+t <- as.numeric(ifelse(df$target_rate == "intolerable", NA, df$target_rate))
+a <- as.numeric(ifelse(df$alt_rate == "intolerable", NA, df$alt_rate))
 
-df\$diff \<- a - t
+df$diff <- a - t 
 
 write.table(df, "results_TFBSrate.csv")
 
-################################################# 
+# upscaling the pipeline 
 
-### Upscaled analysis of all TFs with JASPAR's CORE collection
+# filters for data extraction 
+opts <- list()
+opts[["species"]] <- 10090
+opts[["collection"]] <- "CORE"        
+#opts[["tax_group"]]  <- "vertebrates" 
+#opts[["tf_class"]]   <- "Zinc finger" 
+#opts[["name"]]       <- "CTCF"
 
-################################################# 
+pfmList <- getMatrixSet(JASPAR2020, opts)
+length(pfmList) #[1] 107 
 
-setwd("/scratch/prj/mmg_holland_sandbox/Yanjing")
+pwmList <- toPWM(pfmList, type="log2probratio", pseudocounts=0.8,
+             bg=c(A=0.25, C=0.25, G=0.25, T=0.25)) #default background settings
 
-# filters for data extraction
+subject <- DNAString(fa_seq)
+sitesetList <- searchSeq(pwmList, subject, seqname="modified_rDNA", min.score="75%", strand="+")
 
-opts \<- list() opts[["species"]] \<- 10090 #species ID of mice opts[["collection"]] \<- "CORE"\
-#opts[["tax_group"]] \<- "vertebrates" #opts[["tf_class"]] \<- "Zinc finger" #opts[["name"]] \<- "CTCF"
+sitesetList_df <- as.data.frame(sitesetList)
+write.table(sitesetList_df, "results_all_TFs.csv", col.names=TRUE)
 
-pfmList \<- getMatrixSet(JASPAR2020, opts) length(pfmList) \#[1] 107
+log_list <- list()
 
-pwmList \<- toPWM(pfmList, type="log2probratio", pseudocounts=0.8, bg=c(A=0.25, C=0.25, G=0.25, T=0.25)) #default background settings
+for (tf in unique(sitesetList_df$TF)) {
+  dir.create(file.path("/scratch/prj/mmg_holland_sandbox/Yanjing", tf), showWarnings = FALSE)
+}
 
-subject \<- DNAString(fa_seq) sitesetList \<- searchSeq(pwmList, subject, seqname="modified_rDNA", min.score="75%", strand="+")
+ids <- unique(sitesetList_df$ID)
+base_dir <- "/scratch/prj/mmg_holland_sandbox/Yanjing"
 
-sitesetList_df \<- as.data.frame(sitesetList) write.table(sitesetList_df, "results_all_TFs.csv", col.names=TRUE)
+snv <- read.table("/scratch/prj/mmg_holland_sandbox/Yanjing/supplementary_data/snv.csv", header = TRUE)
+ref_pos <- snv$modified
 
-log_list \<- list()
+snv_range <- GRanges(
+  seqnames = "modified_rDNA",
+  ranges   = IRanges(start = ref_pos, end = ref_pos),
+  strand   = "+")
 
-for (tf in unique(sitesetList_df\$TF)) { dir.create(file.path("/scratch/prj/mmg_holland_sandbox/Yanjing", tf), showWarnings = FALSE) }
+results_list <- list()
+all_results  <- data.frame()
 
-ids \<- unique(sitesetList_df\$ID) base_dir \<- "/scratch/prj/mmg_holland_sandbox/Yanjing"
+for (id in ids) {
+  subset_df <- sitesetList_df[sitesetList_df$ID == id, ]
+  tf_name   <- unique(subset_df$TF)
+  seqs      <- subset_df$siteSeqs
+  out_dir   <- file.path(base_dir, tf_name)
 
-snv \<- read.table("/scratch/prj/mmg_holland_sandbox/Yanjing/supplementary_data/snv.csv", header = TRUE) ref_pos \<- snv\$modified
+  hits_range              <- makeGRangesFromDataFrame(subset_df, keep.extra.columns = TRUE)
+  hits_range$snv_presence <- countOverlaps(hits_range, snv_range)
+  snv_hits                <- hits_range[hits_range$snv_presence > 0]
+  snv_range$overlap_count <- countOverlaps(snv_range, hits_range)
+  snv_range$is_matched    <- countOverlaps(snv_range, hits_range) > 0
+  snv_range$not_matched   <- countOverlaps(snv_range, hits_range) == 0
+  
+  # data for box plots
+  results_list[[id]] <- data.frame(
+    ID            = id,
+    TF            = tf_name,
+    total_hits    = length(hits_range),
+    snv_hits      = length(snv_hits),
+    snv_covered   = sum(snv_range$is_matched),
+    snv_uncovered = sum(snv_range$not_matched),
+    rate          = length(snv_hits) / length(hits_range)
+  )
 
-snv_range \<- GRanges( seqnames = "modified_rDNA", ranges = IRanges(start = ref_pos, end = ref_pos), strand = "+")
+  ## Rplot 1: seqlogo for TF-rDNA mappings at min.score = 75% 
+  pfm_logo <- consensusMatrix(DNAStringSet(seqs))[c("A", "C", "G", "T"), ]
+  p_logo   <- makePWM(prop.table(pfm_logo, margin = 2))
+  pdf(file.path(out_dir, paste0(tf_name, "_", id, "_seqlogo.pdf")), width = 7, height = 5)
+  seqLogo(p_logo)
+  dev.off()
 
-results_list \<- list() all_results \<- data.frame()
+  ## Rplot 2: rug plot
+  p_rug <- ggplot(subset_df, aes(start - 3008)) +
+    geom_histogram(bins = 500) +
+    geom_rug(data = data.frame(ref_pos), aes(x = ref_pos - 3008),
+             sides = "b", colour = "red", alpha = 0.5) +
+    labs(title = paste(tf_name, "Binding Sites"), x = "Position (kb)", y = "Number of binding sites per 500 bp window") +
+    theme_minimal() +
+    scale_x_continuous(labels = label_number(scale = 1e-3, suffix = "k"), limits = c(-2300, 13500))
+  ggsave(file.path(out_dir, paste0(tf_name, "_", id, "_rug_plot.pdf")), plot = p_rug, width = 8, height = 4)
 
-for (id in ids) { subset_df \<- sitesetList_df[sitesetList_df$ID == id, ]
-  tf_name   <- unique(subset_df$TF) seqs \<- subset_df\$siteSeqs out_dir \<- file.path(base_dir, tf_name)
+  ## Rplot 3 - bar plot 1: hits
+  p_hits <- ggplot(data.frame(category = c("Total hits", "Hits containing SNVs"),
+                               count    = c(nrow(subset_df), length(snv_hits))),
+                   aes(x = factor(category, levels = category), y = count, fill = category)) +
+    geom_bar(stat = "identity", colour = "darkgrey") +
+    scale_fill_manual(values = c("skyblue", "salmon")) +
+    labs(title = paste(tf_name, "binding sites in rDNA"), x = "", y = "Number of hits") +
+    theme_minimal() + theme(legend.title = element_blank())
+  ggsave(file.path(out_dir, paste0(tf_name, "_", id, "_bar_plot_hits.pdf")), plot = p_hits, width = 8, height = 8)
 
-hits_range \<- makeGRangesFromDataFrame(subset_df, keep.extra.columns = TRUE) hits_range$snv_presence <- countOverlaps(hits_range, snv_range)
-  snv_hits                <- hits_range[hits_range$snv_presence \> 0] snv_range$overlap_count <- countOverlaps(snv_range, hits_range)
-  snv_range$is_matched \<- countOverlaps(snv_range, hits_range) \> 0 snv_range\$not_matched \<- countOverlaps(snv_range, hits_range) == 0
+  ## Rplot 4 - bar plot 2: SNV coverage
+  p_snv <- ggplot(data.frame(category = c("Total", "Covered by hits", "Uncovered by hits"),
+                              count    = c(88, sum(snv_range$is_matched), sum(snv_range$not_matched))),
+                  aes(x = factor(category, levels = category), y = count, fill = category)) +
+    geom_bar(stat = "identity", colour = "darkgrey") +
+    scale_fill_manual(values = c("pink", "salmon", "skyblue")) +
+    labs(title = paste("Mouse SNVs compared to", tf_name, "binding sites in rDNA"), x = "", y = "Number of SNVs") +
+    theme_minimal() + theme(legend.title = element_blank())
+  ggsave(file.path(out_dir, paste0(tf_name, "_", id, "_bar_plot_snv.pdf")), plot = p_snv, width = 8, height = 8)
 
-\# data for box plots results_list[[id]] \<- data.frame( ID = id, TF = tf_name, total_hits = length(hits_range), snv_hits = length(snv_hits), snv_covered = sum(snv_range$is_matched),
-    snv_uncovered = sum(snv_range$not_matched), rate = length(snv_hits) / length(hits_range) )
+  # pfm rates (WGS)
+  pfm_id  <- getMatrixByID(JASPAR2020, ID = id)
+  pfm_mat <- Matrix(pfm_id)
+  colnames(pfm_mat) <- paste0("Pos", 1:ncol(pfm_mat))
+  pfm_table <- rbind(as.data.frame(pfm_mat), Total = colSums(pfm_mat))
+  write.table(pfm_table, file.path(out_dir, paste0(tf_name, "_", id, "_pfm_counts.csv")), col.names = TRUE)
 
-\## Rplot 1: seqlogo for TF-rDNA mappings at min.score = 75% pfm_logo \<- consensusMatrix(DNAStringSet(seqs))[c("A", "C", "G", "T"), ] p_logo \<- makePWM(prop.table(pfm_logo, margin = 2)) pdf(file.path(out_dir, paste0(tf_name, "\_", id, "\_seqlogo.pdf")), width = 7, height = 5) seqLogo(p_logo) dev.off()
+  snv_covered <- as.data.frame(snv_range) %>% filter(is_matched == TRUE) %>% pull(start)
 
-\## Rplot 2: rug plot p_rug \<- ggplot(subset_df, aes(start - 3008)) + geom_histogram(bins = 500) + geom_rug(data = data.frame(ref_pos), aes(x = ref_pos - 3008), sides = "b", colour = "red", alpha = 0.5) + labs(title = paste(tf_name, "Binding Sites"), x = "Position (kb)", y = "Number of binding sites per 500 bp window") + theme_minimal() + scale_x_continuous(labels = label_number(scale = 1e-3, suffix = "k"), limits = c(-2300, 13500)) ggsave(file.path(out_dir, paste0(tf_name, "\_", id, "\_rug_plot.pdf")), plot = p_rug, width = 8, height = 4)
+  # main results table
+  results <- subset_df %>%
+    mutate(base = strsplit(as.character(siteSeqs), ""),
+           pos  = mapply(seq, start, end, SIMPLIFY = FALSE)) %>%
+    unnest(c(base, pos)) %>%
+    filter(pos %in% snv_covered) %>%
+    left_join(as.data.frame(hits_range) %>% select(start, snv_presence), by = "start") %>%
+    left_join(snv, by = c("pos" = "modified")) %>%
+    rename(snv_modified = pos, snv_original = original) %>%
+    select(seqnames, start, end, absScore, relScore, ID, TF, siteSeqs, base, #added base to confirm but should be the same 
+           snv_presence, snv_modified, snv_original, target_base, alt_base, haplotype)
 
-\## Rplot 3 - bar plot 1: hits p_hits \<- ggplot(data.frame(category = c("Total hits", "Hits containing SNVs"), count = c(nrow(subset_df), length(snv_hits))), aes(x = factor(category, levels = category), y = count, fill = category)) + geom_bar(stat = "identity", colour = "darkgrey") + scale_fill_manual(values = c("skyblue", "salmon")) + labs(title = paste(tf_name, "binding sites in rDNA"), x = "", y = "Number of hits") + theme_minimal() + theme(legend.title = element_blank()) ggsave(file.path(out_dir, paste0(tf_name, "\_", id, "\_bar_plot_hits.pdf")), plot = p_hits, width = 8, height = 8)
+  if (nrow(results) == 0) {
+    cat("Skipped (no SNV overlaps):", tf_name, id, "\n")
+    log_list[[id]] <- data.frame(ID = id, TF = tf_name, status = "Skipped (no SNV overlaps)")
+    next
+  }
+  
+  totals <- as.numeric(pfm_table["Total", ])
+  names(totals) <- 1:ncol(pfm_mat)
 
-\## Rplot 4 - bar plot 2: SNV coverage p_snv \<- ggplot(data.frame(category = c("Total", "Covered by hits", "Uncovered by hits"), count = c(88, sum(snv_range$is_matched), sum(snv_range$not_matched))), aes(x = factor(category, levels = category), y = count, fill = category)) + geom_bar(stat = "identity", colour = "darkgrey") + scale_fill_manual(values = c("pink", "salmon", "skyblue")) + labs(title = paste("Mouse SNVs compared to", tf_name, "binding sites in rDNA"), x = "", y = "Number of SNVs") + theme_minimal() + theme(legend.title = element_blank()) ggsave(file.path(out_dir, paste0(tf_name, "\_", id, "\_bar_plot_snv.pdf")), plot = p_snv, width = 8, height = 8)
+  df <- data.frame(
+    TF           = tf_name,
+    ID           = id,
+    snv_original = results$snv_original,
+    snv_modified = results$snv_modified,
+    position_z   = results$snv_modified - results$start + 1,
+    target_base  = results$target_base,
+    alt_base     = results$alt_base,
+    base         = results$base         
+  )
 
-\# pfm rates (WGS) pfm_id \<- getMatrixByID(JASPAR2020, ID = id) pfm_mat \<- Matrix(pfm_id) colnames(pfm_mat) \<- paste0("Pos", 1:ncol(pfm_mat)) pfm_table \<- rbind(as.data.frame(pfm_mat), Total = colSums(pfm_mat)) write.table(pfm_table, file.path(out_dir, paste0(tf_name, "\_", id, "\_pfm_counts.csv")), col.names = TRUE)
-
-snv_covered \<- as.data.frame(snv_range) %\>% filter(is_matched == TRUE) %\>% pull(start)
-
-\# main results table results \<- subset_df %\>% mutate(base = strsplit(as.character(siteSeqs), ""), pos = mapply(seq, start, end, SIMPLIFY = FALSE)) %\>% unnest(c(base, pos)) %\>% filter(pos %in% snv_covered) %\>% left_join(as.data.frame(hits_range) %\>% select(start, snv_presence), by = "start") %\>% left_join(snv, by = c("pos" = "modified")) %\>% rename(snv_modified = pos, snv_original = original) %\>% select(seqnames, start, end, absScore, relScore, ID, TF, siteSeqs, base, #added base to confirm but should be the same snv_presence, snv_modified, snv_original, target_base, alt_base, haplotype)
-
-if (nrow(results) == 0) { cat("Skipped (no SNV overlaps):", tf_name, id, "\n") log_list[[id]] \<- data.frame(ID = id, TF = tf_name, status = "Skipped (no SNV overlaps)") next }
-
-totals \<- as.numeric(pfm_table["Total", ]) names(totals) \<- 1:ncol(pfm_mat)
-
-df \<- data.frame( TF = tf_name, ID = id, snv_original = results$snv_original,
-    snv_modified = results$snv_modified, position_z = results$snv_modified - results$start + 1, target_base = results$target_base,
-    alt_base     = results$alt_base, base = results\$base\
-)
-
-df$target_rate <- mapply(function(pos, base) {
+  df$target_rate <- mapply(function(pos, base) {
     val <- pfm_mat[base, pos] / totals[pos]
     if (val == 0) "error" else val
-  }, df$position_z, df\$target_base)
+  }, df$position_z, df$target_base)
 
-df$alt_rate <- mapply(function(pos, base) {
+  df$alt_rate <- mapply(function(pos, base) {
     val <- pfm_mat[base, pos] / totals[pos]
     if (val == 0) "intolerable" else val
-  }, df$position_z, df\$alt_base)
+  }, df$position_z, df$alt_base)
 
-df$diff <- suppressWarnings(
-    as.numeric(ifelse(df$alt_rate == "intolerable", NA, df$alt_rate)) -
-    as.numeric(ifelse(df$target_rate == "error", NA, df\$target_rate)) )
+  df$diff <- suppressWarnings(
+    as.numeric(ifelse(df$alt_rate    == "intolerable", NA, df$alt_rate)) -
+    as.numeric(ifelse(df$target_rate == "error",       NA, df$target_rate))
+  )
 
-write.table(df, file.path(out_dir, paste0(tf_name, "\_", id, "\_results_TFBSrate.csv"))) all_results \<- rbind(all_results, df)
+  write.table(df, file.path(out_dir, paste0(tf_name, "_", id, "_results_TFBSrate.csv")))
+  all_results <- rbind(all_results, df)
 
-cat("Done:", tf_name, id, "\n") log_list[[id]] \<- data.frame( ID = id, TF = tf_name, status = "Done" ) }
+  cat("Done:", tf_name, id, "\n")
+  log_list[[id]] <- data.frame(
+  ID      = id,
+  TF      = tf_name,
+  status  = "Done"
+)
+}
 
-all(all_results$base == all_results$target_base) #TRUE thus remove base all_results\$base \<- NULL
+all(all_results$base == all_results$target_base) #TRUE thus remove base
+all_results$base <- NULL
 
-summary_df \<- do.call(rbind, results_list) rownames(summary_df) \<- NULL
+summary_df <- do.call(rbind, results_list)
+rownames(summary_df) <- NULL
 
-all_results$alt_rate[all_results$target_rate == "error"] \<- "error"
+all_results$alt_rate[all_results$target_rate == "error"] <- "error"
 
-write.table(summary_df, "coverage_all_TFs.csv", col.names = TRUE, row.names = FALSE) write.table(all_results, "all_TFs_results_TFBSrate.csv", col.names = TRUE, row.names = FALSE)
+write.table(summary_df,  "coverage_all_TFs.csv", col.names = TRUE, row.names = FALSE)
+write.table(all_results, "all_TFs_results_TFBSrate.csv", col.names = TRUE, row.names = FALSE)
 
-log_df \<- do.call(rbind, log_list) rownames(log_df) \<- NULL write.table(log_df, "List_of_TFs.csv", col.names = TRUE, row.names = FALSE)
+log_df <- do.call(rbind, log_list)
+rownames(log_df) <- NULL
+write.table(log_df, "List_of_TFs.csv", col.names = TRUE, row.names = FALSE)
+
+# generating overall results 
+
+#Rplot1: produce a summary of all TF - pie chart 
+nrow(log_df[log_df$status == "Done", ]) #[1] 76
+
+pie_data <- data.frame(
+  status = c("No.of TFs that had TFBS overlapping with SNVs", "No. of TFs with no TFBS overlapping with SNVs"),
+  count  = c(76, 31)
+)
+
+ggplot(pie_data, aes(x = "", y = count, fill = status)) + 
+    geom_bar(stat = "identity", width = 1) + 
+    coord_polar("y", start = 0) + 
+    scale_fill_manual(values = c("No.of TFs that had TFBS overlapping with SNVs" = "steelblue", "No. of TFs with no TFBS overlapping with SNVs" = "pink")) +
+    geom_text(aes(label = paste0(count, " (", round(count/sum(count)*100), "%)")),
+        position = position_stack(vjust = 0.5), size = 4, colour = "white") +
+    labs(title = "Summary of TFBS that overlap with SNVs") + 
+    theme_void() + 
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+    
+ggsave("Pie_Chart.pdf", width = 10, height = 3)
+
+#looking into results: some target_base == "error"
+results[results$TF == "Lhx3", ] 
+#   snv_original snv_modified position_z target_base alt_base       ID   TF
+#89          413         3421          7           C        T MA0135.1 Lhx3
+#90          419         3427         13           G        T MA0135.1 Lhx3
+#   target_rate    alt_rate diff
+#89       error intolerable   NA #position 7: target base shouldn't be 0 
+#90        0.15         0.3 0.15
+
+#"Pos1" "Pos2" "Pos3" "Pos4" "Pos5" "Pos6" "Pos7" "Pos8" "Pos9" "Pos10" "Pos11" "Pos12" "Pos13"
+#"A" 9 16 19 0 0 19 20 2 0 16 9 2 2
+#"C" 0 2 0 0 0 0 0 2 1 1 0 8 9
+#"G" 3 2 0 0 0 0 0 0 0 0 3 0 3
+#"T" 8 0 1 20 20 1 0 16 19 3 8 10 6
+#"Total" 20 20 20 20 20 20 20 20 20 20 20 20 20 
+
+#double checked base = target_base not sure why 
+df[df$TF == "Lhx3", ] 
+
+#89 Lhx3 MA0135.1          413         3421          7           C        T    C
+#90 Lhx3 MA0135.1          419         3427         13           G        T    G
+#   target_rate    alt_rate diff
+#89       error intolerable   NA
+#90        0.15         0.3 0.15
+
+#conclusion: we accept and disregard error data as we arent going to get perfect matches (min.score = 75%)
+
+#note - the total no. 20 is based on stats and normalised data which means f there were a million reads, MOST were A (at position 7) and not in fact ALL - so not a real-world example
+
+#Rplot2 - ranked box plots: rate of overlap with SNVs/total no. of hits: 
+
+box_data <- read.table("coverage_all_TFs.csv", header = TRUE)
+box_data <- box_data[box_data$rate > 0, ]
+box_data <- box_data[order(box_data$rate), ]
+box_data$TF <- factor(box_data$TF, levels = box_data$TF)
+
+# highlight data for RUNX1
+runx1_data <- box_data[box_data$TF == "RUNX1", ]
+
+ggplot(box_data, aes(x = TF, y = rate, fill = rate)) +
+  geom_bar(stat = "identity") +
+  geom_rect(data = runx1_data,
+            aes(xmin = as.numeric(TF) - 0.45,
+                xmax = as.numeric(TF) + 0.45,
+                ymin = 0,
+                ymax = rate + 0.001),
+            fill = NA, colour = "red", linewidth = 0.8, inherit.aes = FALSE) +
+  scale_fill_gradient(low = "#d0d0d0", high = "#2c3e7a") +
+  labs(title = "Rate of SNV overlap across 107 transcription factors",
+       x = "Transcription factors",
+       y = "No. of TFBS hits that overlap with SNVs/total no. of TFBS hits") +
+  theme_minimal() +
+  scale_y_continuous(labels = percent) + 
+  theme(plot.title = element_text(face = "bold"), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
+        legend.position = "none")
+
+ggsave("TFBS_RankedBarPlot.pdf", width = 10, height = 8)
+
+#Rplot3 - ranked box plots: hits covered/total no. of hits (always 88)
+
+box_data <- read.table("coverage_all_TFs.csv", header = TRUE)
+box_data <- box_data[box_data$snv_covered > 0, ]
+box_data <- box_data[order(box_data$snv_covered), ]
+box_data$TF <- factor(box_data$TF, levels = box_data$TF)
+
+runx1_data <- box_data[box_data$TF == "RUNX1", ]
+
+ggplot(box_data, aes(x = TF, y = ))
+
+ggplot(box_data, aes(x = TF, y = snv_covered/88, fill = snv_covered/88)) +
+  geom_bar(stat = "identity") +
+  geom_rect(data = runx1_data,
+            aes(xmin = as.numeric(TF) - 0.45,
+                xmax = as.numeric(TF) + 0.45,
+                ymin = 0,
+                ymax = 0.32 + 0.002),
+            fill = NA, colour = "#2c3e7a", linewidth = 0.8, inherit.aes = FALSE) +
+  scale_fill_gradient(low = "#FFE4E1", high = "#FA8072") +
+  labs(title = "Transcription factors affected by SNVs ",
+       x = "Transcription factors",
+       y = "SNVs that is covered by TFBS in rDNA") +
+  theme_minimal() +
+  scale_y_continuous(labels = percent) + 
+  theme(plot.title = element_text(face = "bold"), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
+        legend.position = "none")
+
+ggsave("SNV_RankedBarPlot.pdf", width = 10, height = 8)
+
+#load results 
+#results <- read.table("all_TFs_results_TFBSrate.csv", header = TRUE)
+#hits <- read.table("results_all_TFs.csv", header = TRUE) 
+
+#no. of hits 
+nrow(results) #[1] 819
+
+#where SNV triggered an intolerable base that TFBS cannot bind to 
+intolerable <- results[results$alt_rate == "intolerable",]
+nrow(intolerable) #[1] 178 AFTER filtering out when target_base == "error"
+
+#looking into top candidates 
+candidates1 <- c("Rarg", "Wt1", "Klf12", "Ebf2", "Gmeb1", "Rarg(var.2)", "Ar", "Tcf21","Znf281", "Zic2") 
+candidates2 <- c("Nr1h3::Rxra","Pax2","Hic1","RUNX1","Klf12","Gmeb1","Atoh1","Stat5a::Stat5b","Nkx2-5(var.2)","Klf1")
+
+candidate_groups <- list (
+    "Group_1" = candidates1,
+    "Group_2" = candidates2
+)
+
+results_list <- list()
+for (group_name in names (candidate_groups)) {
+    tfs <- candidate_groups[[group_name]]
+    
+    temp_df <- results[results$TF %in% tfs, ]
+    
+    if (nrow(temp_df) > 0) {
+        temp_df$source_group <- group_name
+        results_list[[group_name]] <- temp_df
+    }
+}
+
+final_df <- do.call(rbind, results_list)
+#final_df <- final_df[final_df$target_base != "error", ] #not needed cos candidates genes alr had high rates (alr filtered)
+write.table(final_df,"candidates.csv", col.names = TRUE)
+
+#extracting gene IDs:
+ids_list1 <- unique(sitesetList_df$ID[sitesetList_df$TF %in% candidates1])
+ids_list2 <- unique(sitesetList_df$ID[sitesetList_df$TF %in% candidates2])
+
+df <- as.data.frame(candidates1)
+df$ID <- as.data.frame(ids_list1)
+write.table (df, "candidates1.csv", col.names =TRUE)
+
+df <- as.data.frame(candidates2)
+df$ID <- as.data.frame(ids_list2)
+write.table (df, "candidates2.csv", col.names =TRUE)
+
+# generating sequence logo graphs from JASPAR 
+
+setwd("/scratch/prj/mmg_holland_sandbox/Yanjing") dir.create("JASPAR_seqLogo") setwd("JASPAR_seqLogo")
+
+tf_ids <- c(
+  "MA0615.1",
+  "MA0007.3",
+  "MA0742.1",
+  "MA0832.1",
+  "MA0859.1",
+  "MA0860.1",
+  "MA1604.1",
+  "MA1627.1",
+  "MA1619.1",
+  "MA1630.1",
+  "MA0067.1",
+  "MA0002.2",
+  "MA0493.1",
+  "MA0503.1",
+  "MA0519.1",
+  "MA0615.1",
+  "MA0739.1",
+  "MA0742.1",
+  "MA0461.2"
+)
+
+for (tf_id in tf_ids) {
+  pfm <- getMatrixByID(JASPAR2020, ID = tf_id)
+  pfm_mat <- Matrix(pfm)[c("A", "C", "G", "T"), ]
+  pfm_norm <- prop.table(pfm_mat, margin = 2)
+  p <- makePWM(pfm_norm)
+  pdf_filename <- paste0(tf_id, "_JASPAR_seqLogo.pdf")
+  pdf(pdf_filename, width = 7, height = 5)
+  seqLogo(p)
+  dev.off()
+}
+
+# graphs were exported using sftp through the terminal 
+
+sftp -i ~/.ssh/create_msc k21218585@hpc.create.kcl.ac.uk 
+
+# exporting
+
+cd /scratch/prj/mmg_holland_sandbox/Yanjing/Runx1
+get *.pdf /Users/yzk/Desktop/
+
+# loading file onto the HPC 
+
+lcd /Users/yzk/Desktop
+cd /scratch/prj/mmg_holland_sandbox/Yanjing
+put 13059_2022_2617_MOESM2_ESM.xlsx #SNV supplementary data
