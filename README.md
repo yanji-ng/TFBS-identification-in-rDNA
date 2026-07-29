@@ -7,11 +7,11 @@ Date: 30 July 2026
 
 ## Table of content 
 
-00_setup.Rmd --- setting up mamba environment in the HPC, downloading R packages required for analysis 
 
-01_TFBS_analysis.Rmd --- using JASPAR<br/> 
-02_RShiny --- using ENCODE single-cell<br/> 
-    2.1_ENCODE_data_extraction.sh
-    2.2_ENCODE_data_cleaning.sh
-    2.3_Building_RShiny.Rmd
-03_ChIPseq_protocol.Rmd<br/> 
+* **00_setup.Rmd** — Setting up mamba environment in the HPC, downloading R packages required for analysis
+* **01_TFBS_analysis.Rmd** — Using JASPAR
+* **02_RShiny** — Using ENCODE single-cell
+    * **2.1_ENCODE_data_extraction.sh**
+    * **2.2_ENCODE_data_cleaning.sh**
+    * **2.3_Building_RShiny.Rmd**
+* **03_ChIPseq_protocol.Rmd**
