@@ -1,14 +1,10 @@
-
-### Created on: 2026-07-16 15:58
-### Created by: k2367543
-
-cd /scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf
+cd ./_rdna_chip_ubtf
 export out fqs fq1 fq2 fq bams bam idx
 
 # qc
 
-in=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/data
-out=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/qc && mkdir -p ${out}
+in=./_rdna_chip_ubtf/data
+out=./_rdna_chip_ubtf/qc && mkdir -p ${out}
 fqs=$(printf '%s\n' ${in}/* | grep -E '\.(fastq|fq)(\.gz)?$')
 samples=$(basename -a ${fqs} | sed -E "s/\.(fastq|fq)(\.gz)?.*$//" | uniq)
 parallel -j 3 '
@@ -24,8 +20,8 @@ ${fqs}
 
 # trimming
 
-in=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/data
-out=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/trim && mkdir -p ${out}
+in=./_rdna_chip_ubtf/data
+out=./_rdna_chip_ubtf/trim && mkdir -p ${out}
 fqs=$(printf "%s\n" ${in}/* | grep -E "\.(fastq|fq)(\.gz)?$")
 samples=$(basename -a ${fqs} | sed -E "s/_R?[12][._].*$//" | uniq)
 parallel -j 3 '
@@ -44,8 +40,8 @@ ${fq1} ${fq2}
 
 # build alignment index
 
-fasta=/scratch/prj/mmg_holland_sandbox/_genomes/mouse/GRCm38.p0/rdna/GRCm38.masked.rDNA.looped.fasta
-idx=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/bowtie2-idx && mkdir -p ${idx}
+fasta=../_genomes/mouse/GRCm38.p0/rdna/GRCm38.masked.rDNA.looped.fasta
+idx=./_rdna_chip_ubtf/bowtie2-idx && mkdir -p ${idx}
 bowtie2-build \
 --threads 4 \
 ${fasta} \
@@ -53,8 +49,8 @@ ${idx}/bowtie2-idx
 
 # alignment to genome
 
-in=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/trim
-out=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/map && mkdir -p ${out}
+in=./_rdna_chip_ubtf/trim
+out=./_rdna_chip_ubtf/map && mkdir -p ${out}
 fqs=$(printf '%s\n' ${in}/* | grep -E '\.(fastq|fq)(\.gz)?$')
 samples=$(basename -a ${fqs} | sed -E "s/_R?[12][._].*$//" | uniq)
 parallel -j 3 '
@@ -64,7 +60,7 @@ parallel -j 3 '
     fq2=$(printf "%s\n" ${fqs} | grep ${sample} | grep -E "_R?2[._]")
     [[ -z "${fq1}" || -z "${fq2}" ]] && exit 1
     bowtie2 \
--x /scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/bowtie2-idx/bowtie2-idx \
+-x /_rdna_chip_ubtf/bowtie2-idx/bowtie2-idx \
 --threads 4 \
 -1 ${fq1} -2 ${fq2} \
     | samtools view \
@@ -82,8 +78,8 @@ parallel -j 3 '
 # If the @RG tag was not generated, the below script would generate it automatically.
 # Please, modify this script manually if you require any specific @RG tag for downstream analysis.
 
-in=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/map
-out=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/dedup && mkdir -p ${out}
+in=./_rdna_chip_ubtf/map
+out=./_rdna_chip_ubtf/dedup && mkdir -p ${out}
 bams=$(printf "%s\n" ${in}/* | grep -E "\.(bam|sam)$")
 samples=$(basename -a ${bams} | sed -E "s/\.(bam|sam)$//" | uniq)
 parallel -j 3 '
@@ -122,8 +118,8 @@ parallel -j 3 '
 
 # reads per region
 
-in=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/dedup
-out=/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/bam_BK000964_3_looped_3008 && mkdir -p ${out}
+in=./_rdna_chip_ubtf/dedup
+out=./_rdna_chip_ubtf/bam_BK000964_3_looped_3008 && mkdir -p ${out}
 bams=$(printf '%s\n' ${in}/* | grep -E '\.(bam|sam)$')
 samples=$(basename -a ${bams} | sed -E "s/\.(bam|sam).*$//" | uniq)
 parallel -j 3 '

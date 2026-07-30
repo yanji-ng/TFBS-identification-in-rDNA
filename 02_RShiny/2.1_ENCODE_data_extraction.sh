@@ -1,4 +1,3 @@
-
 library(dplyr)
 library(tidyr)
 
@@ -50,7 +49,7 @@ write.table(link_df, "encode_transcription_mouse_filtered_links.tsv",
 
 ################################################# Bash
 
-cd /scratch/prj/mmg_holland_sandbox/Mila/_expression_atlas
+cd ./_expression_atlas
 mkdir -p data_raw
 
 for LINK in $(cat encode_transcription_mouse_filtered_links.tsv); do

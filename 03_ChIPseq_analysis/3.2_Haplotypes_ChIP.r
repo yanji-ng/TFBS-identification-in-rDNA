@@ -1,12 +1,3 @@
-
-#srun -p cpu --ntasks 1 --nodes 1 --mem 50G --time 0-04:00 --pty /bin/bash -l
-#cd /scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf
-#conda activate cookbook_v02_env
-
-#path_from="/Volumes/PDRA KCL/_Tmp/chip/from_fran/haplotype_pos_mef.csv"
-#path_to="/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/analysis_20260701"
-#scp "${path_from}" mila-work:"${path_to}"
-
 library(data.table)
 library(dplyr)
 library(tidyr)
@@ -15,7 +6,7 @@ library(GenomicAlignments)
 library(stringr)
 library(ggplot2)
 
-setwd("/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf")
+setwd("./_rdna_chip_ubtf")
 
 ###################################################
 ### Collect data
@@ -95,18 +86,11 @@ theme_bw() + theme(
     legend.key.size = unit(0.5, "lines"),
     strip.text = element_text(size = 7))
 ggsave("./analysis_20260701/20260709-panel-01-ubtf-dedup-fran-method.pdf", plot = plot_gg, width = 3, height = 2.8)
-    
+
 ###################################################
 ### Download data
 ###################################################
 
-path_from="/scratch/prj/mmg_holland_sandbox/Mila/_rdna_chip_ubtf/analysis_20260701/*.pdf"
-path_to="/Volumes/PDRA KCL/_Tmp/chip/analysis_20260701"
-scp mila-work:"${path_from}" "${path_to}"
-
-
-
-
-
-
-
+path_from="./_rdna_chip_ubtf/analysis_20260701/*.pdf"
+path_to="/Users/yzk/Desktop/TFBS-Analysis"
+scp -i ~/.ssh/create_msc k21218585@hpc.create.kcl.ac.uk:"${path_from}" "${path_to}"

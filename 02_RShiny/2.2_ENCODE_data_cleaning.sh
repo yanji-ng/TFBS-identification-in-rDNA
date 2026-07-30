@@ -1,8 +1,3 @@
-
-#srun -p cpu --ntasks 1 --nodes 1 --mem 50G --time 0-04:00 --pty /bin/bash -l
-#conda activate cookbook_v02_env
-#cd /scratch/prj/mmg_holland_sandbox/Mila/_expression_atlas
-
 library(data.table)
 library(dplyr)
 library(tidyr)
@@ -10,7 +5,7 @@ library(org.Mm.eg.db)
 library(AnnotationDbi)
 library(rtracklayer)
 
-setwd("/scratch/prj/mmg_holland_sandbox/Mila/_expression_atlas")
+setwd("./_expression_atlas")
 
 ################################################# 
 ### Combine all expression profiles
