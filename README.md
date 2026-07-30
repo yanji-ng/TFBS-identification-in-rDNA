@@ -5,7 +5,7 @@ Source codes, configurations and R scripts can be found for the project "Definin
 Author: Yanjing Zhang  
 Date: 30 July 2026 
 
-## Table of content 
+## Table of contents
 
 * **01_TFBS_analysis.Rmd** — identifying TFBSs in rDNA using data on JASPAR
 * **02_RShiny** — ENCODE single-cell cell data to show expression profiles of 1,241 TF genes 
