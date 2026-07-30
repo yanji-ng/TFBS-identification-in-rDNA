@@ -1,6 +1,5 @@
 # loading cleaned data 
 
-setwd("/Users/yzk/Desktop/TFBS-Analysis/TFBS-Analysis") #R script folder
 load("../input.RData") #loaded data_raw, data_count, data_tpm, ref_gene and ref_sample
 
 library(shiny)
